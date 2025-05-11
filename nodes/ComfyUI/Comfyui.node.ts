@@ -9,14 +9,14 @@ import { Jimp } from 'jimp';
 
 export class Comfyui implements INodeType {
 	description: INodeTypeDescription = {
-		displayName: 'ComfyUI-E',
-		name: 'comfyui-e',
+		displayName: 'ComfyUI',
+		name: 'comfyui',
 		icon: 'file:comfyui.svg',
 		group: ['transform'],
 		version: 1,
 		description: 'Execute ComfyUI workflows',
 		defaults: {
-			name: 'ComfyUI-E',
+			name: 'ComfyUI',
 		},
 		credentials: [
 			{
