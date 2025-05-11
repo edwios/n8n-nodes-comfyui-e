@@ -9,14 +9,14 @@ import { Jimp } from 'jimp';
 
 export class Comfyui implements INodeType {
 	description: INodeTypeDescription = {
-		displayName: 'ComfyUI',
-		name: 'comfyui',
+		displayName: 'ComfyUI-E',
+		name: 'comfyui-e',
 		icon: 'file:comfyui.svg',
 		group: ['transform'],
 		version: 1,
 		description: 'Execute ComfyUI workflows',
 		defaults: {
-			name: 'ComfyUI',
+			name: 'ComfyUI-E',
 		},
 		credentials: [
 			{
@@ -50,6 +50,10 @@ export class Comfyui implements INodeType {
 					{
 						name: 'PNG',
 						value: 'png',
+					},
+					{
+						name: 'WAV Audio',
+						value: 'wav',
 					},
 				],
 				default: 'jpeg',
@@ -175,49 +179,83 @@ export class Comfyui implements INodeType {
 					// Get all image outputs
 					const outputs = await Promise.all(
 						Object.values(promptResult.outputs)
-							.flatMap((nodeOutput: any) => nodeOutput.images || [])
+							.flatMap((nodeOutput: any) => [ ...(nodeOutput.images || []), ...(nodeOutput.audios || [])])
 							.filter((image: any) => image.type === 'output' || image.type === 'temp')
 							.map(async (file: any) => {
-								console.log(`[ComfyUI] Downloading ${file.type} image:`, file.filename);
+								console.log(`[ComfyUI] Downloading ${file.type} file:`, file.filename);
 								let imageUrl = `${apiUrl}/view?filename=${file.filename}&subfolder=${file.subfolder || ''}&type=${file.type || ''}`;
-
-
+								let f_size = "";
+								let item: INodeExecutionData;
 								try {
-									const imageData = await this.helpers.request({
-										method: 'GET',
-										url: imageUrl,
-										encoding: null,
-										headers,
-									});
-									const image = await Jimp.read(Buffer.from(imageData, 'base64'));
-									let outputBuffer: Buffer;
-									if (outputFormat === 'jpeg') {
-										outputBuffer = await image.getBuffer("image/jpeg", { quality: jpegQuality });
-									} else {
-										outputBuffer = await image.getBuffer(`image/png`);
+								const binaryData = await this.helpers.request({
+									method: 'GET',
+									url: imageUrl,
+									encoding: null,
+									headers,
+								});
+								// image
+								if (file.filename.match(/\\.(jpe?g|png)$/i) && (outputFormat === 'jpeg' || outputFormat === 'png')) {
+										const image = await Jimp.read(Buffer.from(binaryData, 'base64'));
+										let outputBuffer: Buffer;
+										if (outputFormat === 'jpeg') {
+											outputBuffer = await image.getBuffer("image/jpeg", { quality: jpegQuality });
+										} else {
+											outputBuffer = await image.getBuffer("image/png");
+										}
+										const outputBase64 = outputBuffer.toString('base64');
+										f_size = Math.round(outputBuffer.length / 1024 * 10) / 10 + " kB";
+										console.log(`[ComfyUI] Got ${f_size} image data at:`, file.filename);
+										item = {
+											json: {
+												filename: file.filename,
+												type: file.type,
+												subfolder: file.subfolder || '',
+												data: outputBase64,
+											},
+											binary: {
+												data: {
+													fileName: file.filename,
+													data: outputBase64,
+													fileType: 'image',
+													fileSize: f_size,
+													fileExtension: outputFormat,
+													mimeType: `image/${outputFormat}`,
+												}
+											}
+										};
+										return item;
 									}
-									const outputBase64 = outputBuffer.toString('base64');
-									const item: INodeExecutionData = {
+									// audio
+									if (file.filename.match(/\\.wav$/i) && outputFormat === 'wav') {
+										const buf = Buffer.from(binaryData, 'base64');
+										const b64 = buf.toString('base64');
+										f_size = Math.round(buf.length / 1024 * 10) / 10 + " kB";
+										console.log(`[ComfyUI] Got ${f_size} audio data at:`, file.filename);
+										item = {
+											json: { filename: file.filename, type: file.type, subfolder: file.subfolder || '' },
+											binary: {
+												data: {
+													fileName: file.filename,
+													data: b64,
+													fileType: 'audio',
+													fileExtension: 'wav',
+													mimeType: 'audio/wav',
+												}
+											}
+										};
+										return item
+									}
+									console.error(`[ComfyUI] Only jpeg, png and wav are supported, ${file.filename}:`, error);
+									return {
 										json: {
 											filename: file.filename,
 											type: file.type,
 											subfolder: file.subfolder || '',
-											data: outputBase64,
+											error: "Error: Only jpeg, png and wav are supported",
 										},
-										binary: {
-											data: {
-												fileName: file.filename,
-												data: outputBase64,
-												fileType: 'image',
-												fileSize: Math.round(outputBuffer.length / 1024 * 10) / 10 + " kB",
-												fileExtension: outputFormat,
-												mimeType: `image/${outputFormat}`,
-											}
-										}
 									};
-									return item
 								} catch (error) {
-									console.error(`[ComfyUI] Failed to download image ${file.filename}:`, error);
+									console.error(`[ComfyUI] Failed to download image or audio data ${file.filename}:`, error);
 									return {
 										json: {
 											filename: file.filename,
