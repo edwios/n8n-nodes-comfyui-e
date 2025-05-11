@@ -245,7 +245,7 @@ export class Comfyui implements INodeType {
 										};
 										return item
 									}
-									console.error(`[ComfyUI] Only jpeg, png and wav are supported, ${file.filename}:`, error);
+									console.error(`[ComfyUI] Only jpeg, png and wav are supported, ${file.filename}`);
 									return {
 										json: {
 											filename: file.filename,
